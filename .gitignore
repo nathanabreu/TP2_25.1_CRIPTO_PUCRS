@@ -3,9 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
-*.so
-
+# chaves temporárias
+chave*.txt
 # Distribution / packaging
 .Python
 build/
