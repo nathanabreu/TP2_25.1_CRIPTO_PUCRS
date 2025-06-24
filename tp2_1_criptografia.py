@@ -1,5 +1,13 @@
 import os
-from Crypto.Util.number import getPrime, inverse, GCD, isPrime, bytes_to_long
+from Crypto.Util.number import (
+    getPrime,
+    inverse,
+    GCD,
+    isPrime,
+    bytes_to_long,
+    long_to_bytes,
+)
+from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes, random
 
 def gerar_chaves(output_dir):
@@ -83,6 +91,76 @@ def compartilhar_chave(output_dir):
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
+def decifrar_mensagem_professor():
+    """Decifra a mensagem enviada pelo professor usando RSA e AES."""
+
+    print("\n🔍 Decifrando mensagem enviada pelo professor...")
+
+    # --- chaves RSA fornecidas pelo professor ---
+    Da_hex = (
+        "d1c8cb37ced842bf9b561a58065c92e4687a85eccf21f16846c00af92b613f41"
+        "e354c135046e7756094570f3a9ad5908dfe3b94b8d8a43a1fa03acdc667e20fa"
+        "69e9f3983a2f10d95eb45ba819b04e44108538fffc0faeadf95418d07265eeb4"
+        "1e307598e103da84e186e0b48ac8281c36ff6829678b1755c83590a98d4261f6"
+        "d6844d99a6bcf8456a0f2896cfa544f0f81cae6c96ae27834d79de0ad74260a7"
+        "39714c4db3dafef93bd0b02fc517163e896c1a10f9ad202a7bdc2ce4ecabdf86"
+        "d725a559af425c74424a12bd5e0fb7709ad53472bb2888af5c4112fa1cd0bcff"
+        "3ae36946d34a23141e691560a1cc2d6c6105e637199669883fc344f6c0bdd24f"
+    )
+    Pa_hex = (
+        "ed844f60146d14bc6db1567e6391a17745add3c53d1d27a8ae9edeb9cd1e55d2"
+        "256ca7c91eb3e42fdf94c7d431312d9c55a3a2c1c1f496cca953e6267b9ba4c8"
+        "373ecde48f2b633175643025cd498560ccd495718a63b331ba171e49d435d42b"
+        "34cb960fd53e315718d1fd1aa9dd9024b60ef138cc6a35e1dae9f8c405f80a3f"
+    )
+    Qa_hex = (
+        "eeef5eb70320f81c22e584eec005977eb539886414750d75619c77cc1230ff0b"
+        "4bc578bec6c5971ddb8071676fb4542a3780d4ec420adcd2919853e284cd3c94"
+        "407cb1a897159298ae118bcf891a582137a837c06edc746640f40ad6a9775c22"
+        "0bd2b17507115189a070232e02549141e59cd5097f6e7594e66fd8dc94dbd949"
+    )
+
+    RSACipheredMsg_hex = (
+        "00C282F6854678CE27B16F6F69808FDC1D5936AD79208E800120AEFC23F0D5C4"
+        "D75EE82B9CE906B982E4C8D8860216F9054CC915C97DB62DA571405582551080A"
+        "85F0BA20D03E804A2EB17808EEDF1CB3C4F9B6090A36C6D3FF9430F4157438481"
+        "5A371DD52DDCB3C19057F64ABA289B5B19379CF766D07C77D3C411CD3DC3C0E16"
+        "86D2023C46540A0B9C3C70DEC70464141B26AE042C164802A50FEC77DBAE4BCEA"
+        "F1310D2731E9274B3E03A1245B5C0880DEF9006DA131037DA0CFDE03E6E24117E"
+        "31C0BBD52395F758E9A3E427F52452E508A9A6A93A98FBBD3AE3CB71F5E379304"
+        "3143FED30B3FC3E001ECC602A3FA3EE59AEFF66946ADBC1D999A3A9CACFF"
+    )
+    AESCipheredMsg_hex = "25C42A154A74B72A7D644A02711D0EC9196C85EF6E85D64A1116BC291F114755"
+
+    Da = int(Da_hex, 16)
+    Pa = int(Pa_hex, 16)
+    Qa = int(Qa_hex, 16)
+    Na = Pa * Qa
+
+    rsa_ct = int(RSACipheredMsg_hex, 16)
+    rsa_pt_int = pow(rsa_ct, Da, Na)
+    rsa_pt_bytes = long_to_bytes(rsa_pt_int)
+    rsa_message = rsa_pt_bytes.decode("utf-8", "ignore")
+
+    aes_key_hex = input("Informe a chave AES (Sa) em hexadecimal: ").strip()
+    aes_key = bytes.fromhex(aes_key_hex)
+    aes_cipher = AES.new(aes_key, AES.MODE_ECB)
+    aes_pt = aes_cipher.decrypt(bytes.fromhex(AESCipheredMsg_hex))
+
+    padding_len = aes_pt[-1]
+    if padding_len > 0 and all(b == padding_len for b in aes_pt[-padding_len:]):
+        aes_pt = aes_pt[:-padding_len]
+
+    aes_message = aes_pt.decode("utf-8", "ignore")
+
+    print("Texto via RSA :", rsa_message)
+    print("Texto via AES :", aes_message)
+
+    if rsa_message == aes_message:
+        print("\u2714 Mensagens RSA e AES coincidem!")
+    else:
+        print("\u274c Mensagens diferentes.")
+
 # === EXECUÇÃO ===
 if __name__ == "__main__":
     print("=== TP2 - Sistema de Chaves RSA e Compartilhamento AES ===")
@@ -92,7 +170,8 @@ if __name__ == "__main__":
     print("1 - Gerar chaves RSA do aluno (Parte 1)")
     print("2 - Compartilhar chave AES com o professor (Parte 2)")
     print("3 - Executar as duas etapas em sequência")
-    opcao = input("Digite sua escolha (1/2/3): ").strip()
+    print("4 - Decifrar mensagem do professor")
+    opcao = input("Digite sua escolha (1/2/3/4): ").strip()
 
     if opcao == "1":
         gerar_chaves(output_dir)
@@ -101,5 +180,7 @@ if __name__ == "__main__":
     elif opcao == "3":
         gerar_chaves(output_dir)
         compartilhar_chave(output_dir)
+    elif opcao == "4":
+        decifrar_mensagem_professor()
     else:
         print("❌ Opção inválida.")
