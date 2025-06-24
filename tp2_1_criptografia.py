@@ -5,35 +5,45 @@ from Crypto.Util.number import (
     GCD,
     isPrime,
     bytes_to_long,
-    long_to_bytes,
+    long_to_bytes, # Importa a função long_to_bytes
 )
-from Crypto.Cipher import AES
+from Crypto.Cipher import AES # Embora não seja usado na descriptografia RSA, mantido por contexto
 from Crypto.Random import get_random_bytes, random
 
 def gerar_chaves(output_dir):
+    """
+    Gera as chaves RSA (pública e privada) do aluno e as salva em arquivos.
+    As chaves são geradas com 1024 bits e salvas em formato hexadecimal.
+    """
     print("🔧 Gerando chaves RSA do aluno...")
 
+    # Gerar dois números primos grandes para Pa e Qa
     Pa = getPrime(1024)
     Qa = getPrime(1024)
+    # Calcular o módulo N (Na = Pa * Qa)
     Na = Pa * Qa
+    # Calcular a função totiente de Euler (L = (Pa - 1) * (Qa - 1))
     L = (Pa - 1) * (Qa - 1)
 
     tentativas = 0
+    # Gerar o expoente público Ea, que deve ser coprimo com L
     while True:
         Ea = random.randint(2, L - 1)
         tentativas += 1
         if isPrime(Ea) and GCD(Ea, L) == 1:
             break
 
+    # Calcular o expoente privado Da (inverso modular de Ea mod L)
     Da = inverse(Ea, L)
 
-    # Converter para hexadecimal
+    # Converter os valores das chaves para strings hexadecimais
     Ea_hex = hex(Ea)
     Na_hex = hex(Na)
     Da_hex = hex(Da)
     Pa_hex = hex(Pa)
     Qa_hex = hex(Qa)
 
+    # Criar o diretório de saída se ele não existir
     os.makedirs(output_dir, exist_ok=True)
 
     # === Salvar chave pública em hexadecimal
@@ -50,9 +60,14 @@ def gerar_chaves(output_dir):
     print(f"✅ Chaves salvas em formato HEX no diretório: {output_dir}")
 
 def compartilhar_chave(output_dir):
+    """
+    Simula o compartilhamento de uma chave AES com o professor usando RSA.
+    Gera um número aleatório Sa, o criptografa com a chave pública do professor
+    e assina digitalmente com a chave privada do aluno.
+    """
     print("📦 Gerando compartilhamento de chave AES...")
 
-    # === Carregar chaves em hexadecimal
+    # === Carregar chaves RSA do aluno em hexadecimal
     with open(os.path.join(output_dir, "chave_publica_hex.txt")) as f:
         pub_lines = f.readlines()
         Ea = int(pub_lines[0].split("=")[1].strip(), 16)
@@ -62,7 +77,7 @@ def compartilhar_chave(output_dir):
         priv_lines = f.readlines()
         Da = int(priv_lines[0].split("=")[1].strip(), 16)
 
-    # Chave pública do professor (fixa)
+    # Chave pública fixa do professor (fornecida no problema)
     Ep_hex = "EEC2681EDAFB5FBF4249302A43764824B28F1D007C5D75955ECCD5CF630243F9"
     Np_hex = (
         "EB7ED592C4C4F9C5CF0D8DFA8921FA91DA89FAB0D31E74CE0451C54998B5CD6B"
@@ -73,16 +88,17 @@ def compartilhar_chave(output_dir):
     Ep = int(Ep_hex, 16)
     Np = int(Np_hex, 16)
 
-    # Gerar chave simétrica
-
-    # Gerar número aleatório Sa
-    print("🔑 Gerando número aleatório Sa...")
-    Sa_bytes = get_random_bytes(16)
+    # Gerar número aleatório Sa (simulando a chave simétrica)
+    print("🔑 Gerando número aleatório Sa (chave simétrica)...")
+    Sa_bytes = get_random_bytes(16) # 16 bytes para uma chave AES-128
     Sa = bytes_to_long(Sa_bytes)
     
+    # Criptografar Sa com a chave pública do professor (X = Sa^Ep mod Np)
     X = pow(Sa, Ep, Np)
+    # Assinar digitalmente X com a chave privada do aluno (SIGx = X^Da mod Na)
     SIGx = pow(X, Da, Na)
 
+    # Salvar os componentes do compartilhamento em um arquivo
     with open(os.path.join(output_dir, "chave_simetrica_hex.txt"), "w") as f:
         f.write(f"X = {hex(X)}\n")
         f.write(f"SIGx = {hex(SIGx)}\n")
@@ -91,77 +107,156 @@ def compartilhar_chave(output_dir):
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
-def decifrar_mensagem_professor():
-    """Decifra a mensagem enviada pelo professor usando RSA e AES."""
+def descriptografar_mensagem_professor():
+    """
+    Descriptografa uma mensagem cifrada em RSA fornecida pelo professor.
+    A mensagem é dividida em blocos, cada bloco é descriptografado usando
+    a chave privada do aluno, e então os bytes são convertidos para texto.
+    """
+    print("🔓 Descriptografando mensagem do professor...")
+    
+    try:
+        # Carregar chave privada do aluno (Da, Pa, Qa)
+        with open(os.path.join(output_dir, "chave_privada_hex.txt")) as f:
+            priv_lines = f.readlines()
+            Da = int(priv_lines[0].split("=")[1].strip(), 16)
+            Pa = int(priv_lines[1].split("=")[1].strip(), 16)
+            Qa = int(priv_lines[2].split("=")[1].strip(), 16)
+        # Recalcular Na a partir de Pa e Qa
+        Na = Pa * Qa
+        
+        print("✅ Chave privada carregada")
+        # Informar o tamanho de Na em bytes para referência
+        print(f"   Tamanho de Na: {Na.bit_length()} bits ({Na.bit_length() // 8} bytes)")
+        
+        # Solicitar a mensagem cifrada do professor em formato hexadecimal
+        print("\n📝 Cole a mensagem cifrada do professor (RSACipheredMsg_hex):")
+        mensagem_hex = input().strip()
+        
+        # Limpar a entrada: remover o prefixo '0x' se presente, espaços em branco e quebras de linha
+        if mensagem_hex.startswith("0x"):
+            mensagem_hex = mensagem_hex[2:]
+        mensagem_hex = mensagem_hex.replace(" ", "").replace("\n", "").replace("\r", "")
+        
+        # Converter a string hexadecimal da mensagem para bytes (conversão "raw")
+        mensagem_bytes_raw = bytes.fromhex(mensagem_hex)
 
-    print("\n🔍 Decifrando mensagem enviada pelo professor...")
+        print(f"📏 Tamanho da mensagem cifrada (raw): {len(mensagem_bytes_raw)} bytes")
+        
+        # Calcular o tamanho esperado de cada bloco cifrado, que é o tamanho de Na em bytes.
+        # RSA criptografa números M < N. O ciphertext C também é < N.
+        # Portanto, o ciphertext terá no máximo o mesmo número de bytes que N.
+        tamanho_bloco_rsa_bytes = (Na.bit_length() + 7) // 8
+        print(f"🔢 Tamanho esperado de cada bloco RSA (baseado em Na): {tamanho_bloco_rsa_bytes} bytes")
 
-    # --- chaves RSA fornecidas pelo professor ---
-    Da_hex = (
-        "d1c8cb37ced842bf9b561a58065c92e4687a85eccf21f16846c00af92b613f41"
-        "e354c135046e7756094570f3a9ad5908dfe3b94b8d8a43a1fa03acdc667e20fa"
-        "69e9f3983a2f10d95eb45ba819b04e44108538fffc0faeadf95418d07265eeb4"
-        "1e307598e103da84e186e0b48ac8281c36ff6829678b1755c83590a98d4261f6"
-        "d6844d99a6bcf8456a0f2896cfa544f0f81cae6c96ae27834d79de0ad74260a7"
-        "39714c4db3dafef93bd0b02fc517163e896c1a10f9ad202a7bdc2ce4ecabdf86"
-        "d725a559af425c74424a12bd5e0fb7709ad53472bb2888af5c4112fa1cd0bcff"
-        "3ae36946d34a23141e691560a1cc2d6c6105e637199669883fc344f6c0bdd24f"
-    )
-    Pa_hex = (
-        "ed844f60146d14bc6db1567e6391a17745add3c53d1d27a8ae9edeb9cd1e55d2"
-        "256ca7c91eb3e42fdf94c7d431312d9c55a3a2c1c1f496cca953e6267b9ba4c8"
-        "373ecde48f2b633175643025cd498560ccd495718a63b331ba171e49d435d42b"
-        "34cb960fd53e315718d1fd1aa9dd9024b60ef138cc6a35e1dae9f8c405f80a3f"
-    )
-    Qa_hex = (
-        "eeef5eb70320f81c22e584eec005977eb539886414750d75619c77cc1230ff0b"
-        "4bc578bec6c5971ddb8071676fb4542a3780d4ec420adcd2919853e284cd3c94"
-        "407cb1a897159298ae118bcf891a582137a837c06edc746640f40ad6a9775c22"
-        "0bd2b17507115189a070232e02549141e59cd5097f6e7594e66fd8dc94dbd949"
-    )
+        # === LÓGICA ADICIONAL PARA LIDAR COM POSSÍVEL BYTE ZERO INICIAL ===
+        # Se o comprimento total da mensagem em bytes for 1 byte a mais do que um múltiplo do tamanho do bloco,
+        # E o primeiro byte for 0x00, é muito provável que seja um zero inicial "extra" que deve ser ignorado.
+        # Isso é comum em representações hexadecimais de números RSA que não preenchem todos os 2048 bits.
+        if len(mensagem_bytes_raw) > 0 and \
+           len(mensagem_bytes_raw) % tamanho_bloco_rsa_bytes == 1 and \
+           mensagem_bytes_raw[0] == 0x00:
+            print("⚠️  Detectado um byte '0x00' inicial extra que será ignorado para o particionamento em blocos.")
+            # Remove o byte 0x00 inicial
+            mensagem_bytes = mensagem_bytes_raw[1:]
+        else:
+            # Caso contrário, usa os bytes raw como estão
+            mensagem_bytes = mensagem_bytes_raw
+        # === FIM DA LÓGICA ADICIONAL ===
 
-    RSACipheredMsg_hex = (
-        "00C282F6854678CE27B16F6F69808FDC1D5936AD79208E800120AEFC23F0D5C4"
-        "D75EE82B9CE906B982E4C8D8860216F9054CC915C97DB62DA571405582551080A"
-        "85F0BA20D03E804A2EB17808EEDF1CB3C4F9B6090A36C6D3FF9430F4157438481"
-        "5A371DD52DDCB3C19057F64ABA289B5B19379CF766D07C77D3C411CD3DC3C0E16"
-        "86D2023C46540A0B9C3C70DEC70464141B26AE042C164802A50FEC77DBAE4BCEA"
-        "F1310D2731E9274B3E03A1245B5C0880DEF9006DA131037DA0CFDE03E6E24117E"
-        "31C0BBD52395F758E9A3E427F52452E508A9A6A93A98FBBD3AE3CB71F5E379304"
-        "3143FED30B3FC3E001ECC602A3FA3EE59AEFF66946ADBC1D999A3A9CACFF"
-    )
-    AESCipheredMsg_hex = "25C42A154A74B72A7D644A02711D0EC9196C85EF6E85D64A1116BC291F114755"
+        # Validar se o comprimento da mensagem agora é um múltiplo do tamanho do bloco
+        if len(mensagem_bytes) % tamanho_bloco_rsa_bytes != 0:
+            print(f"❌ Erro: O tamanho da mensagem cifrada ({len(mensagem_bytes)} bytes) não é um múltiplo do tamanho esperado do bloco RSA ({tamanho_bloco_rsa_bytes} bytes) após o tratamento inicial.")
+            print("Certifique-se de que a mensagem foi copiada corretamente e consiste em blocos RSA completos.")
+            return
 
-    Da = int(Da_hex, 16)
-    Pa = int(Pa_hex, 16)
-    Qa = int(Qa_hex, 16)
-    Na = Pa * Qa
+        print(f"📏 Tamanho da mensagem cifrada (ajustado para blocos): {len(mensagem_bytes)} bytes")
+        
+        # Quebrar a mensagem cifrada em blocos do tamanho do módulo Na
+        blocos_cifrados_int = []
+        for i in range(0, len(mensagem_bytes), tamanho_bloco_rsa_bytes):
+            bloco_bytes = mensagem_bytes[i:i + tamanho_bloco_rsa_bytes]
+            if bloco_bytes: # Deve ser sempre verdadeiro se o comprimento for um múltiplo
+                # Converter cada bloco de bytes cifrados para um inteiro
+                bloco_cifrado_int = int.from_bytes(bloco_bytes, byteorder='big')
+                blocos_cifrados_int.append(bloco_cifrado_int)
+        
+        print(f"📦 Total de blocos cifrados identificados: {len(blocos_cifrados_int)}")
+        
+        # Lista para armazenar os bytes descriptografados de cada bloco (sem padding inicial)
+        blocos_descriptografados_bytes_lista = [] 
+        
+        # Descriptografar cada bloco
+        for i, bloco_cifrado_int in enumerate(blocos_cifrados_int):
+            print(f"\n🔓 Descriptografando bloco {i+1}/{len(blocos_cifrados_int)}...")
+            
+            # Verificar se o bloco cifrado é válido (deve ser menor que Na)
+            if bloco_cifrado_int >= Na:
+                print(f"❌ Erro: Bloco cifrado {i+1} é maior ou igual a Na. "
+                      "Isso indica que a mensagem está corrompida ou foi criptografada incorretamente para esta chave.")
+                # Continua para o próximo bloco, mas registra o erro
+                blocos_descriptografados_bytes_lista.append(b'[ERRO_BLOCO_INVALIDO]') 
+                continue
+            
+            # Descriptografar o bloco: mensagem_clara_int = bloco_cifrado_int^Da mod Na
+            bloco_descriptografado_int = pow(bloco_cifrado_int, Da, Na)
+            
+            # Converter o inteiro descriptografado de volta para bytes.
+            # long_to_bytes converte um inteiro em uma string de bytes.
+            # É importante garantir que os bytes resultantes correspondam ao que era esperado após o padding RSA.
+            # O comprimento da mensagem descriptografada (antes de remover o padding)
+            # deve ser o mesmo que o tamanho do módulo N em bytes.
+            bytes_descriptografados_com_padding = long_to_bytes(bloco_descriptografado_int, tamanho_bloco_rsa_bytes)
+            
+            print(f"   Tamanho dos bytes descriptografados (com padding): {len(bytes_descriptografados_com_padding)} bytes")
+            print(f"   Hexadecimal (com padding): {bytes_descriptografados_com_padding.hex()}")
 
-    rsa_ct = int(RSACipheredMsg_hex, 16)
-    rsa_pt_int = pow(rsa_ct, Da, Na)
-    rsa_pt_bytes = long_to_bytes(rsa_pt_int)
-    rsa_message = rsa_pt_bytes.decode("utf-8", "ignore")
+            # Remover bytes nulos iniciais (padding).
+            # Em RSA básico, frequentemente o plaintext é preenchido com zeros à esquerda
+            # para atingir o tamanho do bloco. `lstrip(b'\x00')` remove esses zeros.
+            bytes_descriptografados_sem_padding = bytes_descriptografados_com_padding.lstrip(b'\x00')
+            
+            print(f"   Tamanho dos bytes descriptografados (sem padding): {len(bytes_descriptografados_sem_padding)} bytes")
+            print(f"   Hexadecimal (sem padding): {bytes_descriptografados_sem_padding.hex()}")
+            
+            # Adicionar os bytes descriptografados (sem padding) à lista
+            blocos_descriptografados_bytes_lista.append(bytes_descriptografados_sem_padding)
+        
+        # === Tentar decodificar a mensagem completa ===
+        print("\n🔗 Tentando combinar e decodificar todos os blocos como uma mensagem única...")
+        
+        # Unir todos os bytes descriptografados (já sem o padding inicial de cada bloco)
+        bytes_completos_descriptografados = b''.join(blocos_descriptografados_bytes_lista)
+        
+        print(f"📏 Tamanho total da mensagem em bytes (descriptografada e sem padding inicial): {len(bytes_completos_descriptografados)} bytes")
 
-    aes_key_hex = input("Informe a chave AES (Sa) em hexadecimal: ").strip()
-    aes_key = bytes.fromhex(aes_key_hex)
-    aes_cipher = AES.new(aes_key, AES.MODE_ECB)
-    aes_pt = aes_cipher.decrypt(bytes.fromhex(AESCipheredMsg_hex))
+        texto_decodificado_completo = None
+        # Tentar decodificar com diferentes codificações
+        for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'ascii']:
+            try:
+                texto_teste = bytes_completos_descriptografados.decode(encoding)
+                # Verifica se o texto resultante é imprimível ou contém apenas caracteres ASCII comuns
+                if texto_teste.isprintable() or all(ord(c) < 128 for c in texto_teste):
+                    texto_decodificado_completo = texto_teste
+                    print(f"\n✅ Mensagem descriptografada com sucesso ({encoding}):")
+                    print(f"📄 {texto_decodificado_completo}")
+                    break # Se encontrou uma codificação válida, para o loop
+            except UnicodeDecodeError:
+                continue # Tenta a próxima codificação
+        
+        if texto_decodificado_completo is None:
+            # Se nenhuma codificação resultou em texto legível
+            print(f"\n⚠️  Não foi possível decodificar a mensagem completa como texto legível.")
+            print(f"\n🔢 Hexadecimal dos bytes descriptografados (sem padding inicial, para debug): {bytes_completos_descriptografados.hex()}")
+            print("\nIsso pode indicar que a mensagem não era texto ou que a codificação usada na criptografia original é diferente.")
 
-    padding_len = aes_pt[-1]
-    if padding_len > 0 and all(b == padding_len for b in aes_pt[-padding_len:]):
-        aes_pt = aes_pt[:-padding_len]
 
-    aes_message = aes_pt.decode("utf-8", "ignore")
+    except FileNotFoundError:
+        print("❌ Erro: Arquivo de chave privada não encontrado. Por favor, execute a opção '1 - Gerar chaves RSA do aluno' primeiro para criar as chaves.")
+    except Exception as e:
+        print(f"❌ Ocorreu um erro inesperado durante a descriptografia: {e}")
 
-    print("Texto via RSA :", rsa_message)
-    print("Texto via AES :", aes_message)
-
-    if rsa_message == aes_message:
-        print("\u2714 Mensagens RSA e AES coincidem!")
-    else:
-        print("\u274c Mensagens diferentes.")
-
-# === EXECUÇÃO ===
+# === EXECUÇÃO PRINCIPAL DO SCRIPT ===
 if __name__ == "__main__":
     print("=== TP2 - Sistema de Chaves RSA e Compartilhamento AES ===")
     output_dir = input("📁 Digite o diretório onde os arquivos serão salvos/carregados: ").strip()
@@ -181,6 +276,6 @@ if __name__ == "__main__":
         gerar_chaves(output_dir)
         compartilhar_chave(output_dir)
     elif opcao == "4":
-        decifrar_mensagem_professor()
+        descriptografar_mensagem_professor()
     else:
         print("❌ Opção inválida.")
