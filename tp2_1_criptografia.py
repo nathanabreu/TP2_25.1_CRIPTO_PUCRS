@@ -97,6 +97,7 @@ def compartilhar_chave(output_dir):
         f.write(f"SIGx = {hex(SIGx)}\n")
         f.write(f"Ea = {hex(Ea)}\n")
         f.write(f"Na = {hex(Na)}\n")
+        f.write(f"Sa = {hex(Sa)}\n")
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
