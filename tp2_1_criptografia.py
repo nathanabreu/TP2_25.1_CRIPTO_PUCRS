@@ -7,15 +7,16 @@ from Crypto.Util.number import (
     bytes_to_long,
     long_to_bytes, # Importa a função long_to_bytes
 )
-from Crypto.Cipher import AES # Embora não seja usado na descriptografia RSA, mantido por contexto
+from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes, random
+from Crypto.Util.Padding import unpad
 
 def gerar_chaves(output_dir):
     """Gera as chaves RSA do aluno"""
     print("🔧 Gerando chaves RSA do aluno...")
 
     # Gerar primos Pa e Qa
-    Pa = getPrime(1024)
+    Pa = getPrime(1024)    
     Qa = getPrime(1024)
     Na = Pa * Qa
     L = (Pa - 1) * (Qa - 1)
@@ -33,12 +34,18 @@ def gerar_chaves(output_dir):
     # Calcular Da (chave privada)
     Da = inverse(Ea, L)
 
+    # Gerar chave simétrica Sa
+    print("🔑 Gerando número aleatório Sa (chave simétrica)...")
+    Sa_bytes = get_random_bytes(16)
+    Sa = bytes_to_long(Sa_bytes)
+
     # Converter para hex
     Ea_hex = hex(Ea)
     Na_hex = hex(Na)
     Da_hex = hex(Da)
     Pa_hex = hex(Pa)
     Qa_hex = hex(Qa)
+    Sa_hex = hex(Sa)
 
     # Criar o diretório de saída se ele não existir
     os.makedirs(output_dir, exist_ok=True)
@@ -53,6 +60,7 @@ def gerar_chaves(output_dir):
         f.write(f"Da = {Da_hex}\n")
         f.write(f"Pa = {Pa_hex}\n")
         f.write(f"Qa = {Qa_hex}\n")
+        f.write(f"Sa = {Sa_hex}\n")
 
     print(f" Chaves salvas em formato HEX no diretório: {output_dir}")
 
@@ -69,6 +77,7 @@ def compartilhar_chave(output_dir):
     with open(os.path.join(output_dir, "chave_privada_hex.txt")) as f:
         priv_lines = f.readlines()
         Da = int(priv_lines[0].split("=")[1].strip(), 16)
+        Sa = int(priv_lines[3].split("=")[1].strip(), 16)
 
     # Chave pública fixa do professor
     Ep_hex = "EEC2681EDAFB5FBF4249302A43764824B28F1D007C5D75955ECCD5CF630243F9"
@@ -81,10 +90,7 @@ def compartilhar_chave(output_dir):
     Ep = int(Ep_hex, 16)
     Np = int(Np_hex, 16)
 
-    # Gerar chave simétrica Sa
-    print("🔑 Gerando número aleatório Sa (chave simétrica)...")
-    Sa_bytes = get_random_bytes(16)
-    Sa = bytes_to_long(Sa_bytes)
+    print("🔑 Carregando chave simétrica Sa do arquivo de chave privada...")
     
     # Criptografar com chave pública do professor
     X = pow(Sa, Ep, Np)
@@ -97,7 +103,6 @@ def compartilhar_chave(output_dir):
         f.write(f"SIGx = {hex(SIGx)}\n")
         f.write(f"Ea = {hex(Ea)}\n")
         f.write(f"Na = {hex(Na)}\n")
-        f.write(f"Sa = {hex(Sa)}\n")
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
@@ -216,6 +221,81 @@ def descriptografar_mensagem_professor():
     except Exception as e:
         print(f"❌ Erro: {e}")
 
+def descriptografar_mensagem_aes():
+    """Descriptografa mensagem AES usando a chave Sa"""
+    print("🔓 Descriptografando mensagem AES...")
+    
+    try:
+        # Carregar chave simétrica Sa do arquivo de chave privada
+        with open(os.path.join(output_dir, "chave_privada_hex.txt")) as f:
+            priv_lines = f.readlines()
+            Sa_hex = priv_lines[3].split("=")[1].strip()
+            
+            # Remover prefixo 0x se presente
+            if Sa_hex.startswith("0x"):
+                Sa_hex = Sa_hex[2:]
+            
+            Sa = int(Sa_hex, 16)
+        
+        # Converter Sa de volta para bytes
+        Sa_bytes = long_to_bytes(Sa, 16)
+        print("✅ Chave simétrica Sa carregada")
+        print(f"🔑 Sa (hex): {Sa_hex}")
+        
+        # Pegar mensagem cifrada AES
+        print("\n📝 Cole a mensagem cifrada AES (AESCipheredMsg_hex):")
+        mensagem_hex = input().strip()
+        
+        # Limpar entrada
+        if mensagem_hex.startswith("0x"):
+            mensagem_hex = mensagem_hex[2:]
+        mensagem_hex = mensagem_hex.replace(" ", "").replace("\n", "").replace("\r", "")
+        
+        # Converter para bytes
+        mensagem_bytes = bytes.fromhex(mensagem_hex)
+        print(f"📏 Tamanho da mensagem cifrada: {len(mensagem_bytes)} bytes")
+        
+        # Extrair IV (primeiros 16 bytes) e dados cifrados
+        if len(mensagem_bytes) < 16:
+            print("❌ Erro: Mensagem muito curta para conter IV")
+            return
+            
+        iv = mensagem_bytes[:16]
+        dados_cifrados = mensagem_bytes[16:]
+        
+        print(f"🔢 IV: {iv.hex()}")
+        print(f"📦 Dados cifrados: {len(dados_cifrados)} bytes")
+        
+        # Criar cipher AES
+        cipher = AES.new(Sa_bytes, AES.MODE_CBC, iv)
+        
+        # Descriptografar
+        try:
+            dados_descriptografados = cipher.decrypt(dados_cifrados)
+            
+            # Remover padding PKCS7
+            padding_length = dados_descriptografados[-1]
+            if padding_length <= 16 and all(b == padding_length for b in dados_descriptografados[-padding_length:]):
+                dados_descriptografados = dados_descriptografados[:-padding_length]
+            
+            # Tentar decodificar como texto
+            try:
+                texto_decodificado = dados_descriptografados.decode('utf-8')
+                print(f"\n✅ Mensagem descriptografada:")
+                print(f"📄 {texto_decodificado}")
+            except UnicodeDecodeError:
+                print(f"\n⚠️  Não foi possível decodificar como UTF-8")
+                print(f"🔢 Hex: {dados_descriptografados.hex()}")
+                
+        except Exception as e:
+            print(f"❌ Erro na descriptografia AES: {e}")
+            
+    except FileNotFoundError:
+        print("❌ Arquivo de chave privada não encontrado. Execute opção 1 primeiro.")
+    except Exception as e:
+        print(f"❌ Erro: {e}")
+
+
 # Menu principal
 if __name__ == "__main__":
     print("=== TP2 - Sistema de Chaves RSA e Compartilhamento AES ===")
@@ -226,7 +306,8 @@ if __name__ == "__main__":
     print("2 - Compartilhar chave AES com o professor (Parte 2)")
     print("3 - Executar as duas etapas em sequência")
     print("4 - Decifrar mensagem do professor")
-    opcao = input("Digite sua escolha (1/2/3/4): ").strip()
+    print("5 - Decifrar mensagem AES")
+    opcao = input("Digite sua escolha (1/2/3/4/5): ").strip()
 
     if opcao == "1":
         gerar_chaves(output_dir)
@@ -237,5 +318,7 @@ if __name__ == "__main__":
         compartilhar_chave(output_dir)
     elif opcao == "4":
         descriptografar_mensagem_professor()
+    elif opcao == "5":
+        descriptografar_mensagem_aes()
     else:
         print("❌ Opção inválida.")
