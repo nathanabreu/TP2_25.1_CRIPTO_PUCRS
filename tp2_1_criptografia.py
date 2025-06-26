@@ -272,12 +272,10 @@ def descriptografar_mensagem_aes():
         # Descriptografar
         try:
             dados_descriptografados = cipher.decrypt(dados_cifrados)
-            
+
             # Remover padding PKCS7
-            padding_length = dados_descriptografados[-1]
-            if padding_length <= 16 and all(b == padding_length for b in dados_descriptografados[-padding_length:]):
-                dados_descriptografados = dados_descriptografados[:-padding_length]
-            
+            dados_descriptografados = unpad(dados_descriptografados, 16)
+
             # Tentar decodificar como texto
             try:
                 texto_decodificado = dados_descriptografados.decode('utf-8')
@@ -286,7 +284,7 @@ def descriptografar_mensagem_aes():
             except UnicodeDecodeError:
                 print(f"\n⚠️  Não foi possível decodificar como UTF-8")
                 print(f"🔢 Hex: {dados_descriptografados.hex()}")
-                
+
         except Exception as e:
             print(f"❌ Erro na descriptografia AES: {e}")
             
