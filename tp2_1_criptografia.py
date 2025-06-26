@@ -245,8 +245,10 @@ def descriptografar_mensagem_aes():
         # Pegar mensagem cifrada AES
         print("\n📝 Cole a mensagem cifrada AES (AESCipheredMsg_hex):")
         mensagem_hex = input().strip()
-        
-        # Limpar entrada
+
+        # Limpar possíveis prefixos ("AESCipheredMsg=" ou "0x")
+        if "=" in mensagem_hex:
+            mensagem_hex = mensagem_hex.split("=", 1)[1]
         if mensagem_hex.startswith("0x"):
             mensagem_hex = mensagem_hex[2:]
         mensagem_hex = mensagem_hex.replace(" ", "").replace("\n", "").replace("\r", "")
@@ -273,8 +275,12 @@ def descriptografar_mensagem_aes():
         try:
             dados_descriptografados = cipher.decrypt(dados_cifrados)
 
-            # Remover padding PKCS7
-            dados_descriptografados = unpad(dados_descriptografados, 16)
+            # Remover padding PKCS7 (se aplicável)
+            try:
+                dados_descriptografados = unpad(dados_descriptografados, 16)
+            except ValueError:
+                # Caso não haja padding válido, continuar com os bytes brutos
+                pass
 
             # Tentar decodificar como texto
             try:
