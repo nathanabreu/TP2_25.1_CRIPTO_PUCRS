@@ -106,120 +106,104 @@ def compartilhar_chave(output_dir):
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
-def descriptografar_mensagem_professor():
+def descriptografar_mensagem_rsa():
     """Descriptografa mensagem RSA do professor"""
-    print("🔓 Descriptografando mensagem do professor...")
+    print("Descriptografando mensagem do professor...")
     
     try:
-        # Carregar chave privada
+        # carrega minha chave privada
         with open(os.path.join(output_dir, "chave_privada_hex.txt")) as f:
-            priv_lines = f.readlines()
-            Da = int(priv_lines[0].split("=")[1].strip(), 16)
-            Pa = int(priv_lines[1].split("=")[1].strip(), 16)
-            Qa = int(priv_lines[2].split("=")[1].strip(), 16)
-        Na = Pa * Qa
+            linhas = f.readlines()
+            Da = int(linhas[0].split("=")[1].strip(), 16)  # minha chave privada
+            Pa = int(linhas[1].split("=")[1].strip(), 16)  # primo P
+            Qa = int(linhas[2].split("=")[1].strip(), 16)  # primo Q
         
-        print("✅ Chave privada carregada")
-        print(f"   Tamanho de Na: {Na.bit_length()} bits ({Na.bit_length() // 8} bytes)")
+        Na = Pa * Qa  # calcula N = P * Q
+        print("Chave privada carregada!")
         
-        # Pegar mensagem do professor
-        print("\n📝 Cole a mensagem cifrada do professor (RSACipheredMsg_hex):")
-        mensagem_hex = input().strip()
+        # pega a mensagem cifrada do professor
+        print("Cole a mensagem cifrada do professor:")
+        msg_hex = input().strip()
         
-        # Limpar entrada
-        if mensagem_hex.startswith("0x"):
-            mensagem_hex = mensagem_hex[2:]
-        mensagem_hex = mensagem_hex.replace(" ", "").replace("\n", "").replace("\r", "")
+        # limpa a mensagem (remove 0x e espaços)
+        if msg_hex.startswith("0x"):
+            msg_hex = msg_hex[2:]
+        msg_hex = msg_hex.replace(" ", "").replace("\n", "")
         
-        # Converter para bytes
-        mensagem_bytes_raw = bytes.fromhex(mensagem_hex)
-        print(f"📏 Tamanho da mensagem cifrada (raw): {len(mensagem_bytes_raw)} bytes")
+        # converte hex para bytes
+        msg_bytes = bytes.fromhex(msg_hex)
+        print(f"Mensagem tem {len(msg_bytes)} bytes")
         
-        # Calcular tamanho do bloco RSA
-        tamanho_bloco_rsa_bytes = (Na.bit_length() + 7) // 8
-        print(f"🔢 Tamanho esperado de cada bloco RSA: {tamanho_bloco_rsa_bytes} bytes")
-
-        # Tratar possível byte zero inicial extra
-        if len(mensagem_bytes_raw) > 0 and \
-           len(mensagem_bytes_raw) % tamanho_bloco_rsa_bytes == 1 and \
-           mensagem_bytes_raw[0] == 0x00:
-            mensagem_bytes = mensagem_bytes_raw[1:]
-        else:
-            mensagem_bytes = mensagem_bytes_raw
-
-        # Validar tamanho
-        if len(mensagem_bytes) % tamanho_bloco_rsa_bytes != 0:
-            print(f"❌ Erro: Tamanho da mensagem não é múltiplo do bloco RSA")
+        # calcula tamanho do bloco RSA (baseado no tamanho de N)
+        tamanho_bloco = (Na.bit_length() + 7) // 8
+        print(f"Cada bloco RSA tem {tamanho_bloco} bytes")
+        
+        # remove byte zero extra se tiver
+        if len(msg_bytes) > 0 and len(msg_bytes) % tamanho_bloco == 1 and msg_bytes[0] == 0x00:
+            msg_bytes = msg_bytes[1:]
+        
+        # verifica se o tamanho está certo
+        if len(msg_bytes) % tamanho_bloco != 0:
+            print("Erro: tamanho da mensagem não é múltiplo do bloco RSA")
             return
-
-        print(f"📏 Tamanho da mensagem (ajustado): {len(mensagem_bytes)} bytes")
         
-        # Quebrar em blocos
-        blocos_cifrados_int = []
-        for i in range(0, len(mensagem_bytes), tamanho_bloco_rsa_bytes):
-            bloco_bytes = mensagem_bytes[i:i + tamanho_bloco_rsa_bytes]
+        # quebra a mensagem em blocos
+        blocos = []
+        for i in range(0, len(msg_bytes), tamanho_bloco):
+            bloco_bytes = msg_bytes[i:i + tamanho_bloco]
             if bloco_bytes:
-                bloco_cifrado_int = int.from_bytes(bloco_bytes, byteorder='big')
-                blocos_cifrados_int.append(bloco_cifrado_int)
+                bloco_int = int.from_bytes(bloco_bytes, byteorder='big')
+                blocos.append(bloco_int)
         
-        print(f"📦 Total de blocos: {len(blocos_cifrados_int)}")
+        print(f"Total de {len(blocos)} blocos para descriptografar")
         
-        # Descriptografar cada bloco
-        blocos_descriptografados_bytes_lista = []
+        # descriptografa cada bloco
+        resultado_final = b''
         
-        for i, bloco_cifrado_int in enumerate(blocos_cifrados_int):
-            print(f"\n🔓 Descriptografando bloco {i+1}/{len(blocos_cifrados_int)}...")
+        for i, bloco_cifrado in enumerate(blocos):
+            print(f"Descriptografando bloco {i+1}...")
             
-            # Validar bloco
-            if bloco_cifrado_int >= Na:
-                print(f"❌ Erro: Bloco {i+1} maior que Na")
-                blocos_descriptografados_bytes_lista.append(b'[ERRO_BLOCO_INVALIDO]')
+            # verifica se o bloco é válido
+            if bloco_cifrado >= Na:
+                print(f"Erro no bloco {i+1}: muito grande")
                 continue
             
-            # Descriptografar
-            bloco_descriptografado_int = pow(bloco_cifrado_int, Da, Na)
+            # descriptografa: m = c^d mod n
+            bloco_descriptografado = pow(bloco_cifrado, Da, Na)
             
-            # Converter para bytes
-            bytes_descriptografados_com_padding = long_to_bytes(bloco_descriptografado_int, tamanho_bloco_rsa_bytes)
+            # converte para bytes
+            bytes_com_padding = long_to_bytes(bloco_descriptografado, tamanho_bloco)
             
-            print(f"   Tamanho (com padding): {len(bytes_descriptografados_com_padding)} bytes")
-            print(f"   Hex (com padding): {bytes_descriptografados_com_padding.hex()}")
-
-            # Remover padding
-            bytes_descriptografados_sem_padding = bytes_descriptografados_com_padding.lstrip(b'\x00')
+            # remove padding (zeros à esquerda)
+            bytes_sem_padding = bytes_com_padding.lstrip(b'\x00')
             
-            print(f"   Tamanho (sem padding): {len(bytes_descriptografados_sem_padding)} bytes")
-            print(f"   Hex (sem padding): {bytes_descriptografados_sem_padding.hex()}")
-            
-            blocos_descriptografados_bytes_lista.append(bytes_descriptografados_sem_padding)
+            resultado_final += bytes_sem_padding
         
-        # Combinar e decodificar
-        print("\n🔗 Combinando e decodificando blocos...")
+        print(f"Mensagem descriptografada tem {len(resultado_final)} bytes")
         
-        bytes_completos_descriptografados = b''.join(blocos_descriptografados_bytes_lista)
-        print(f"📏 Tamanho total: {len(bytes_completos_descriptografados)} bytes")
-
-        # Tentar diferentes encodings
-        texto_decodificado_completo = None
-        for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'ascii']:
-            try:
-                texto_teste = bytes_completos_descriptografados.decode(encoding)
-                if texto_teste.isprintable() or all(ord(c) < 128 for c in texto_teste):
-                    texto_decodificado_completo = texto_teste
-                    print(f"\n✅ Mensagem descriptografada ({encoding}):")
-                    print(f"📄 {texto_decodificado_completo}")
+        # tenta decodificar como texto
+        try:
+            texto = resultado_final.decode('utf-8')
+            print("Mensagem do professor:")
+            print(texto)
+        except:
+            # se não der UTF-8, tenta outros encodings
+            for encoding in ['latin-1', 'ascii']:
+                try:
+                    texto = resultado_final.decode(encoding)
+                    print(f"Mensagem ({encoding}):")
+                    print(texto)
                     break
-            except UnicodeDecodeError:
-                continue
-        
-        if texto_decodificado_completo is None:
-            print(f"\n⚠️  Não foi possível decodificar como texto legível")
-            print(f"🔢 Hex para debug: {bytes_completos_descriptografados.hex()}")
+                except:
+                    continue
+            else:
+                print("Não consegui decodificar como texto")
+                print(f"Hex: {resultado_final.hex()}")
 
     except FileNotFoundError:
-        print("❌ Arquivo de chave privada não encontrado. Execute opção 1 primeiro.")
+        print("Arquivo de chave privada não encontrado. Execute opção 1 primeiro.")
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"Erro: {e}")
 
 def descriptografar_mensagem_aes():
     """Descriptografa mensagem AES usando a chave Sa"""
@@ -303,7 +287,7 @@ if __name__ == "__main__":
     print("1 - Gerar chaves RSA do aluno (Parte 1)")
     print("2 - Compartilhar chave AES com o professor (Parte 2)")
     print("3 - Executar as duas etapas em sequência")
-    print("4 - Decifrar mensagem do professor")
+    print("4 - Decifrar mensagem rsa")
     print("5 - Decifrar mensagem AES")
     opcao = input("Digite sua escolha (1/2/3/4/5): ").strip()
 
@@ -315,7 +299,7 @@ if __name__ == "__main__":
         gerar_chaves(output_dir)
         compartilhar_chave(output_dir)
     elif opcao == "4":
-        descriptografar_mensagem_professor()
+        descriptografar_mensagem_rsa()
     elif opcao == "5":
         descriptografar_mensagem_aes()
     else:
