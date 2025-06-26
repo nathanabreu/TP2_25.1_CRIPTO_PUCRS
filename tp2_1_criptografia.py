@@ -12,9 +12,6 @@ from Crypto.Random import get_random_bytes, random
 from Crypto.Util.Padding import unpad
 
 def gerar_chaves(output_dir):
-    """Gera as chaves RSA do aluno"""
-    print("🔧 Gerando chaves RSA do aluno...")
-
     # Gerar primos Pa e Qa
     Pa = getPrime(1024)    
     Qa = getPrime(1024)
@@ -35,7 +32,6 @@ def gerar_chaves(output_dir):
     Da = inverse(Ea, L)
 
     # Gerar chave simétrica Sa
-    print("🔑 Gerando número aleatório Sa (chave simétrica)...")
     Sa_bytes = get_random_bytes(16)
     Sa = bytes_to_long(Sa_bytes)
 
@@ -65,9 +61,6 @@ def gerar_chaves(output_dir):
     print(f" Chaves salvas em formato HEX no diretório: {output_dir}")
 
 def compartilhar_chave(output_dir):
-    """Compartilha chave AES com o professor usando RSA"""
-    print("Gerando compartilhamento de chave AES...")
-
     # Carregar chaves do aluno
     with open(os.path.join(output_dir, "chave_publica_hex.txt")) as f:
         pub_lines = f.readlines()
@@ -106,7 +99,7 @@ def compartilhar_chave(output_dir):
 
     print(f"✅ Compartilhamento salvo em: {os.path.join(output_dir, 'chave_simetrica_hex.txt')}")
 
-def descriptografar_mensagem_rsa():
+def descriptografar_mensagem_rsa(output_dir):
     """Descriptografa mensagem RSA do professor"""
     print("Descriptografando mensagem do professor...")
     
@@ -205,84 +198,6 @@ def descriptografar_mensagem_rsa():
     except Exception as e:
         print(f"Erro: {e}")
 
-def descriptografar_mensagem_aes():
-    """Descriptografa mensagem AES usando a chave Sa"""
-    print("🔓 Descriptografando mensagem AES...")
-    
-    try:
-        # Carregar chave simétrica Sa do arquivo de chave privada
-        with open(os.path.join(output_dir, "chave_privada_hex.txt")) as f:
-            priv_lines = f.readlines()
-            Sa_hex = priv_lines[3].split("=")[1].strip()
-            
-            # Remover prefixo 0x se presente
-            if Sa_hex.startswith("0x"):
-                Sa_hex = Sa_hex[2:]
-            
-            Sa = int(Sa_hex, 16)
-        
-        # Converter Sa de volta para bytes
-        Sa_bytes = long_to_bytes(Sa, 16)
-        print("✅ Chave simétrica Sa carregada")
-        print(f"🔑 Sa (hex): {Sa_hex}")
-        
-        # Pegar mensagem cifrada AES
-        print("\n📝 Cole a mensagem cifrada AES (AESCipheredMsg_hex):")
-        mensagem_hex = input().strip()
-
-        # Limpar possíveis prefixos ("AESCipheredMsg=" ou "0x")
-        if "=" in mensagem_hex:
-            mensagem_hex = mensagem_hex.split("=", 1)[1]
-        if mensagem_hex.startswith("0x"):
-            mensagem_hex = mensagem_hex[2:]
-        mensagem_hex = mensagem_hex.replace(" ", "").replace("\n", "").replace("\r", "")
-        
-        # Converter para bytes
-        mensagem_bytes = bytes.fromhex(mensagem_hex)
-        print(f"📏 Tamanho da mensagem cifrada: {len(mensagem_bytes)} bytes")
-        
-        # Extrair IV (primeiros 16 bytes) e dados cifrados
-        if len(mensagem_bytes) < 16:
-            print("❌ Erro: Mensagem muito curta para conter IV")
-            return
-            
-        iv = mensagem_bytes[:16]
-        dados_cifrados = mensagem_bytes[16:]
-        
-        print(f"🔢 IV: {iv.hex()}")
-        print(f"📦 Dados cifrados: {len(dados_cifrados)} bytes")
-        
-        # Criar cipher AES
-        cipher = AES.new(Sa_bytes, AES.MODE_CBC, iv)
-        
-        # Descriptografar
-        try:
-            dados_descriptografados = cipher.decrypt(dados_cifrados)
-
-            # Remover padding PKCS7 (se aplicável)
-            try:
-                dados_descriptografados = unpad(dados_descriptografados, 16)
-            except ValueError:
-                # Caso não haja padding válido, continuar com os bytes brutos
-                pass
-
-            # Tentar decodificar como texto
-            try:
-                texto_decodificado = dados_descriptografados.decode('utf-8')
-                print(f"\n✅ Mensagem descriptografada:")
-                print(f"📄 {texto_decodificado}")
-            except UnicodeDecodeError:
-                print(f"\n⚠️  Não foi possível decodificar como UTF-8")
-                print(f"🔢 Hex: {dados_descriptografados.hex()}")
-
-        except Exception as e:
-            print(f"❌ Erro na descriptografia AES: {e}")
-            
-    except FileNotFoundError:
-        print("❌ Arquivo de chave privada não encontrado. Execute opção 1 primeiro.")
-    except Exception as e:
-        print(f"❌ Erro: {e}")
-
 
 # Menu principal
 if __name__ == "__main__":
@@ -294,8 +209,7 @@ if __name__ == "__main__":
     print("2 - Compartilhar chave AES com o professor (Parte 2)")
     print("3 - Executar as duas etapas em sequência")
     print("4 - Decifrar mensagem rsa")
-    print("5 - Decifrar mensagem AES")
-    opcao = input("Digite sua escolha (1/2/3/4/5): ").strip()
+    opcao = input("Digite sua escolha (1/2/3/4): ").strip()
 
     if opcao == "1":
         gerar_chaves(output_dir)
@@ -305,8 +219,6 @@ if __name__ == "__main__":
         gerar_chaves(output_dir)
         compartilhar_chave(output_dir)
     elif opcao == "4":
-        descriptografar_mensagem_rsa()
-    elif opcao == "5":
-        descriptografar_mensagem_aes()
+        descriptografar_mensagem_rsa(output_dir)
     else:
         print("❌ Opção inválida.")
